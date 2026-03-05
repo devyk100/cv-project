@@ -1,0 +1,1 @@
+This repository holds the code, and setup for the implementation for the research topic - `Edge Computing Driven Low Light Image Dynamic Enhancement for Object Detection`
