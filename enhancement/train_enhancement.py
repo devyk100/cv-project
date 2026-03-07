@@ -10,6 +10,8 @@ import torch.optim as optim
 
 from models.enhancement_net import EnhancementNet
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
 
 class EnhancementDataset(Dataset):
 
@@ -50,10 +52,10 @@ args = parser.parse_args()
 
 dataset = EnhancementDataset("dataset/input", args.target_dir)
 
-loader = DataLoader(dataset,batch_size=8,shuffle=True)
+loader = DataLoader(dataset,batch_size=24,shuffle=True)
 
 
-model = EnhancementNet()
+model = EnhancementNet().to(device)
 
 criterion = nn.MSELoss()
 
@@ -65,6 +67,9 @@ for epoch in range(25):
     total_loss = 0
 
     for x,y in loader:
+
+        x = x.to(device)
+        y = y.to(device)
 
         pred = model(x)
 
