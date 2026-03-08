@@ -19,7 +19,7 @@ targets = [
 cloud = CloudEnhancer(models)
 
 enhanced_images, weights = cloud.enhance(
-    "dataset/input/Y_img1.png",
+    "dataset/input/Y_2015_00005.jpg",
     targets
 )
 
