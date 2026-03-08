@@ -85,3 +85,43 @@ class CloudEnhancer:
         weights = (1 - losses / np.sum(losses)) * (N / (N - 1))
 
         return enhanced_images, weights
+    
+    def enhance_tensor(self, Y_tensor, image_path, target_dirs):
+
+        filename = os.path.basename(image_path)
+
+        targets = []
+
+        for t in target_dirs:
+            target_path = os.path.join(t, filename)
+
+            target = cv2.imread(target_path, cv2.IMREAD_GRAYSCALE)
+            target = cv2.resize(target, (224,224))
+
+            target = target.astype(np.float32) / 255.0
+            target = np.expand_dims(target,0)
+            target = np.expand_dims(target,0)
+
+            targets.append(torch.tensor(target).to(device))
+
+        enhanced_images = []
+        losses = []
+
+        with torch.no_grad():
+
+            for model, target in zip(self.models, targets):
+
+                pred = model(Y_tensor.to(device))
+
+                loss = self.compute_loss(pred, target)
+
+                enhanced_images.append(pred)
+                losses.append(loss)
+
+        losses = np.array(losses)
+
+        N = len(losses)
+
+        weights = (1 - losses / np.sum(losses)) * (N / (N - 1))
+
+        return enhanced_images, weights

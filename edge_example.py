@@ -8,12 +8,16 @@ from preprocessing.single_preprocess import preprocess_single_image
 
 # Load models
 
+import os
+
+BASE = "enhancement"
+
 models = [
-    "model_clahe.pth",
-    "model_hist.pth",
-    "model_sharpen.pth",
-    "model_bilateral.pth",
-    "model_gamma.pth"
+    os.path.join(BASE, "model_clahe.pth"),
+    os.path.join(BASE, "model_hist.pth"),
+    os.path.join(BASE, "model_sharpen.pth"),
+    os.path.join(BASE, "model_bilateral.pth"),
+    os.path.join(BASE, "model_gamma.pth"),
 ]
 
 targets = [
