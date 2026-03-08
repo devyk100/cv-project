@@ -2,6 +2,7 @@ import torch
 import torchvision
 import cv2
 import numpy as np
+from torchvision.models.detection.image_list import ImageList
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -10,7 +11,7 @@ class EdgeDetector:
     def __init__(self):
 
         self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-            pretrained=True
+            weights="DEFAULT"
         )
 
         self.model = self.model.to(device)
@@ -48,7 +49,8 @@ class EdgeDetector:
 
         for img in images:
 
-            img = cv2.resize(img, (800, 800))
+            img = cv2.resize(img, (800, 800)) # the boxes get an offset due to resizing, so we stay at 244 X 244
+            # img = cv2.resize(img, (224,224))
 
             tensor = torch.tensor(img).permute(2,0,1).float()/255
             tensor = tensor.unsqueeze(0).to(device)
@@ -87,17 +89,16 @@ class EdgeDetector:
 
         fused = {}
 
-        # original_feat is a dict from FPN:
-        # {'0':..., '1':..., '2':..., '3':..., 'pool':...}
+        n = len(weighted_feats) + 1
 
-        for k in original_feat:
+        for level in original_feat.keys():
 
-            total = original_feat[k].clone()
+            fused_feature = original_feat[level].clone()
 
             for wf in weighted_feats:
-                total += wf[k]
+                fused_feature += wf[level]
 
-            fused[k] = total
+            fused[level] = fused_feature / n
 
         return fused
 
@@ -129,16 +130,21 @@ class WeightedFasterRCNN:
     def detect_with_features(self, image_tensor, fused_features):
 
         """
-        Run FasterRCNN using custom backbone features
+        Run FasterRCNN using externally fused backbone features
         """
 
-        # generate proposals
-        proposals, _ = self.model.rpn(image_tensor, fused_features)
+        # create ImageList object expected by RPN
+        image_sizes = [(image_tensor.shape[-2], image_tensor.shape[-1])]
+        images = ImageList(image_tensor, image_sizes)
 
+        # run RPN
+        proposals, _ = self.model.rpn(images, fused_features)
+
+        # run ROI heads
         detections, _ = self.model.roi_heads(
             fused_features,
             proposals,
-            image_tensor.shape[-2:],
+            image_sizes,
         )
 
         return detections

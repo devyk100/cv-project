@@ -1,6 +1,6 @@
 import torch
 import cv2
-
+import os
 from enhancement.cloud_enhancement import CloudEnhancer
 from detection.edge_detection import EdgeDetector, WeightedFasterRCNN
 from preprocessing.single_preprocess import preprocess_single_image
@@ -29,7 +29,7 @@ edge = EdgeDetector()
 # Input image
 # -----------------------------
 
-image_path = "example-dataset/cat1/2015_00001.png"
+image_path = "example-dataset/cat1/2015_00012.jpg"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 
@@ -69,17 +69,29 @@ combined_feats = edge.combine_features(orig_features, weighted_feats)
 
 detector = WeightedFasterRCNN()
 
+detector_input = cv2.resize(rgb_resized, (800, 800))
+
+detector_tensor = torch.tensor(detector_input).permute(2,0,1).unsqueeze(0).float().to(device)
+
 detections = detector.detect_with_features(
-    torch.tensor(rgb_resized).permute(2,0,1).unsqueeze(0).float().to(device),
+    detector_tensor,
     combined_feats
 )
 
 print("Detections:", detections)
 
-vis = draw_detections(rgb_resized, detections)
+detector_input = cv2.resize(rgb_resized, (800, 800))
+vis = draw_detections(detector_input, detections)
 
-cv2.imshow("Detections", vis)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+output_dir = "detection_result"
+os.makedirs(output_dir, exist_ok=True)
+
+image_name = os.path.basename(image_path)
+
+output_path = os.path.join(output_dir, image_name)
+
+cv2.imwrite(output_path, vis)
+
+print(f"Saved: {output_path}")
 
 
