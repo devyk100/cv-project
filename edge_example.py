@@ -1,69 +1,85 @@
 import torch
 import cv2
-import numpy as np
 
 from enhancement.cloud_enhancement import CloudEnhancer
-from detection.edge_detection import EdgeDetector
+from detection.edge_detection import EdgeDetector, WeightedFasterRCNN
 from preprocessing.single_preprocess import preprocess_single_image
 
-# Load models
+from detection.visualize import draw_detections
 
-import os
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-BASE = "enhancement"
+# -----------------------------
+# Load enhancement models
+# -----------------------------
 
 models = [
-    os.path.join(BASE, "model_clahe.pth"),
-    os.path.join(BASE, "model_hist.pth"),
-    os.path.join(BASE, "model_sharpen.pth"),
-    os.path.join(BASE, "model_bilateral.pth"),
-    os.path.join(BASE, "model_gamma.pth"),
+    "enhancement/model_clahe.pth",
+    "enhancement/model_hist.pth",
+    "enhancement/model_sharpen.pth",
+    "enhancement/model_bilateral.pth",
+    "enhancement/model_gamma.pth"
 ]
-
-targets = [
-    "dataset/target_clahe",
-    "dataset/target_hist",
-    "dataset/target_sharpen",
-    "dataset/target_bilateral",
-    "dataset/target_gamma"
-]
-
 
 cloud = CloudEnhancer(models)
 edge = EdgeDetector()
 
 
+# -----------------------------
 # Input image
+# -----------------------------
 
-image_path = "./example-dataset/cat1/2015_00009.jpg"
+image_path = "example-dataset/cat1/2015_00001.png"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 
 Y_tensor = torch.tensor(Y)
 
-# Cloud stage
 
-enhanced_images, weights = cloud.enhance_tensor(
-    Y_tensor,
-    image_path,
-    targets
-)
+# -----------------------------
+# Cloud stage
+# -----------------------------
+
+enhanced_images, weights = cloud.enhance_tensor(Y_tensor)
 
 print("Dynamic weights:", weights)
 
 
+# -----------------------------
 # Edge stage
+# -----------------------------
 
+# Step 1: reconstruct RGB
 rgb_images = edge.reconstruct_rgb(enhanced_images, Cr, Cb)
 
+# Step 2: extract features
 features = edge.extract_features(rgb_images)
 
+# original image features
 orig_features = edge.extract_features([rgb_resized])[0]
 
+# Step 3: apply weights
 weighted_feats = edge.apply_weights(features, weights)
 
+# Step 4: combine features
 combined_feats = edge.combine_features(orig_features, weighted_feats)
 
-detections = edge.detect(rgb_resized)
+# Step 5: run detector
+# detections = edge.detect(rgb_resized) # first it was run on the original RGB device
 
-print(detections)
+detector = WeightedFasterRCNN()
+
+detections = detector.detect_with_features(
+    torch.tensor(rgb_resized).permute(2,0,1).unsqueeze(0).float().to(device),
+    combined_feats
+)
+
+print("Detections:", detections)
+
+vis = draw_detections(rgb_resized, detections)
+
+cv2.imshow("Detections", vis)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+

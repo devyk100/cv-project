@@ -5,7 +5,6 @@ import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 class EdgeDetector:
 
     def __init__(self):
@@ -86,7 +85,10 @@ class EdgeDetector:
     # -----------------------------
     def combine_features(self, original_feat, weighted_feats):
 
-        combined = {}
+        fused = {}
+
+        # original_feat is a dict from FPN:
+        # {'0':..., '1':..., '2':..., '3':..., 'pool':...}
 
         for k in original_feat:
 
@@ -95,9 +97,9 @@ class EdgeDetector:
             for wf in weighted_feats:
                 total += wf[k]
 
-            combined[k] = total
+            fused[k] = total
 
-        return combined
+        return fused
 
 
     # -----------------------------
@@ -112,3 +114,31 @@ class EdgeDetector:
             output = self.model(tensor)
 
         return output
+
+class WeightedFasterRCNN:
+
+    def __init__(self):
+
+        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights="DEFAULT"
+        )
+
+        self.model = self.model.to(device)
+        self.model.eval()
+
+    def detect_with_features(self, image_tensor, fused_features):
+
+        """
+        Run FasterRCNN using custom backbone features
+        """
+
+        # generate proposals
+        proposals, _ = self.model.rpn(image_tensor, fused_features)
+
+        detections, _ = self.model.roi_heads(
+            fused_features,
+            proposals,
+            image_tensor.shape[-2:],
+        )
+
+        return detections

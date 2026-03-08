@@ -1,11 +1,6 @@
 import torch
-import cv2
-import os
 import numpy as np
-
-# from models.enhancement_net import EnhancementNet # when using from edge_example.py
 from enhancement.models.enhancement_net import EnhancementNet
-
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -20,108 +15,43 @@ class CloudEnhancer:
 
             model = EnhancementNet()
             model.load_state_dict(torch.load(path, map_location=device))
-            model.to(device)
+            model = model.to(device)
             model.eval()
 
             self.models.append(model)
 
-        print("Loaded", len(self.models), "enhancement subnetworks")
+        print(f"Loaded {len(self.models)} enhancement subnetworks")
 
-    def preprocess(self, image_path):
+    # ----------------------------------
+    # Core cloud enhancement stage
+    # ----------------------------------
+    def enhance_tensor(self, Y_tensor):
 
-        img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        """
+        Y_tensor shape: (1,1,224,224)
+        """
 
-        img = cv2.resize(img, (224,224))
-
-        img = img.astype(np.float32) / 255.0
-
-        img = np.expand_dims(img, 0)
-        img = np.expand_dims(img, 0)
-
-        return torch.tensor(img).to(device)
-
-    def compute_loss(self, pred, target):
-
-        return torch.mean((pred - target) ** 2).item()
-
-    def enhance(self, image_path, target_dir):
-
-        Y = self.preprocess(image_path)
-
-        filename = os.path.basename(image_path)
-
-        targets = []
-
-        for t in target_dir:
-            target_path = os.path.join(t, filename)
-
-            target = cv2.imread(target_path, cv2.IMREAD_GRAYSCALE)
-            target = cv2.resize(target, (224,224))
-
-            target = target.astype(np.float32) / 255.0
-            target = np.expand_dims(target, 0)
-            target = np.expand_dims(target, 0)
-
-            targets.append(torch.tensor(target).to(device))
+        Y_tensor = Y_tensor.to(device)
 
         enhanced_images = []
-        losses = []
 
         with torch.no_grad():
-
-            for model, target in zip(self.models, targets):
-
-                pred = model(Y)
-
-                loss = self.compute_loss(pred, target)
-
+            for model in self.models:
+                pred = model(Y_tensor)
                 enhanced_images.append(pred)
-                losses.append(loss)
 
-        losses = np.array(losses)
+        # compute dynamic weights using enhancement outputs
+        scores = []
 
-        N = len(losses)
+        for img in enhanced_images:
+            arr = img.squeeze().cpu().numpy()
+            scores.append(np.var(arr))  # contrast proxy
 
-        weights = (1 - losses / np.sum(losses)) * (N / (N - 1))
+        scores = np.array(scores)
 
-        return enhanced_images, weights
-    
-    def enhance_tensor(self, Y_tensor, image_path, target_dirs):
-
-        filename = os.path.basename(image_path)
-
-        targets = []
-
-        for t in target_dirs:
-            target_path = os.path.join(t, filename)
-
-            target = cv2.imread(target_path, cv2.IMREAD_GRAYSCALE)
-            target = cv2.resize(target, (224,224))
-
-            target = target.astype(np.float32) / 255.0
-            target = np.expand_dims(target,0)
-            target = np.expand_dims(target,0)
-
-            targets.append(torch.tensor(target).to(device))
-
-        enhanced_images = []
-        losses = []
-
-        with torch.no_grad():
-
-            for model, target in zip(self.models, targets):
-
-                pred = model(Y_tensor.to(device))
-
-                loss = self.compute_loss(pred, target)
-
-                enhanced_images.append(pred)
-                losses.append(loss)
-
-        losses = np.array(losses)
-
-        N = len(losses)
-
-        weights = (1 - losses / np.sum(losses)) * (N / (N - 1))
+        if scores.sum() == 0:
+            weights = np.ones(len(scores)) / len(scores)
+        else:
+            weights = scores / scores.sum()
 
         return enhanced_images, weights
