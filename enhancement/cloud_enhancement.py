@@ -3,7 +3,8 @@ import cv2
 import os
 import numpy as np
 
-from models.enhancement_net import EnhancementNet
+# from models.enhancement_net import EnhancementNet # when using from edge_example.py
+from enhancement.models.enhancement_net import EnhancementNet
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
