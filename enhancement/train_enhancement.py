@@ -52,7 +52,7 @@ args = parser.parse_args()
 
 dataset = EnhancementDataset("dataset/input", args.target_dir)
 
-loader = DataLoader(dataset,batch_size=24,shuffle=True)
+loader = DataLoader(dataset,batch_size=30,shuffle=True)
 
 
 model = EnhancementNet().to(device)

@@ -33,8 +33,8 @@ def draw_detections(image, detections, score_threshold=0.10): # change this for 
     boxes = boxes_tensor[keep].numpy()
     scores = scores_tensor[keep].numpy()
     labels = labels[keep]
-# -----------------------------------------
-        # ---------- ADD THIS NEXT ----------
+    # -----------------------------------------
+    # ---------- ADD THIS NEXT ----------
     top_k = 5
 
     indices = scores.argsort()[::-1][:top_k]
