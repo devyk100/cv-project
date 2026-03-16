@@ -29,7 +29,7 @@ edge = EdgeDetector()
 # Input image
 # -----------------------------
 
-image_path = "example-dataset/cat1/2015_00021.jpg"
+image_path = "example-dataset/cat1/WIN_20260316_09_13_30_Pro.jpg"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 

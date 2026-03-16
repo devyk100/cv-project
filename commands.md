@@ -6,3 +6,4 @@ pip install --pre torch torchvision torchaudio --index-url https://download.pyto
 for python 3.13
 pip install dotenv
 pip install opencv-python
+pip install pycocotools

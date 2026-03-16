@@ -18,7 +18,7 @@ COCO_CLASSES = [
 ]
 
 
-def draw_detections(image, detections, score_threshold=0.10): # change this for better results
+def draw_detections(image, detections, score_threshold=0.0): # change this for better results
 
     boxes = detections[0]["boxes"].detach().cpu().numpy()
     labels = detections[0]["labels"].detach().cpu().numpy()
