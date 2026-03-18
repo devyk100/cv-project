@@ -186,6 +186,9 @@ def evaluate_dataset(dataset_images,
 
     iou_thresholds = np.arange(0.5, 0.96, 0.05)
 
+    # Build an index once to avoid an expensive os.walk per image.
+    ann_index = build_annotation_index(annotation_root)
+
     ap_list = []
     ap50 = []
     ap75 = []
@@ -204,7 +207,7 @@ def evaluate_dataset(dataset_images,
 
         for img in dataset_images:
 
-            ann_file = find_annotation_file(annotation_root, img)
+            ann_file = find_annotation_file(annotation_root, img, ann_index)
 
             gt_boxes, gt_labels, areas = load_exdark_annotation(ann_file)
 
@@ -257,11 +260,38 @@ def evaluate_dataset(dataset_images,
 # ------------------------------------------------------------
 
 def find_annotation_file(annotation_root, image_name):
+    return find_annotation_file(annotation_root, image_name, None)
 
-    for root, dirs, files in os.walk(annotation_root):
 
+def build_annotation_index(annotation_root):
+    """
+    Returns:
+        dict[str, str]: image_name -> full annotation path
+    Where image_name corresponds to annotation filename without ".txt".
+    Example: if file is "2015_00001.jpg.txt", key is "2015_00001.jpg".
+    """
+    index = {}
+    for root, _, files in os.walk(annotation_root):
+        for fn in files:
+            if not fn.endswith(".txt"):
+                continue
+            key = fn[:-4]
+            index[key] = os.path.join(root, fn)
+    return index
+
+
+def find_annotation_file(annotation_root, image_name, ann_index=None):
+    """
+    If ann_index is provided, uses O(1) lookup. Otherwise falls back to walking.
+    """
+    if ann_index is not None:
+        path = ann_index.get(image_name)
+        if path is None:
+            raise Exception("Annotation not found for " + image_name)
+        return path
+
+    for root, _, files in os.walk(annotation_root):
         file = image_name + ".txt"
-
         if file in files:
             return os.path.join(root, file)
 
