@@ -90,16 +90,18 @@ class EdgeDetector:
 
 
     # -----------------------------
-    # Step 4: sum weighted feature maps into one (eq. 7 final combination)
-    # RPN will use orig_feat only (passed separately)
-    # ROI heads use this combined map
+    # Step 4: fuse weighted feature maps (eq. 7)
+    # Sum then divide by N+1 to keep magnitudes consistent with what
+    # the pretrained ROI heads expect — raw sum inflates activations
+    # and causes overconfident, duplicated detections.
     # -----------------------------
     def fuse_feature_maps(self, weighted_features):
 
+        N = len(weighted_features)
         fused = {}
 
         for k in weighted_features[0]:
-            fused[k] = sum(feat[k] for feat in weighted_features)
+            fused[k] = sum(feat[k] for feat in weighted_features) / N
 
         return fused
 
