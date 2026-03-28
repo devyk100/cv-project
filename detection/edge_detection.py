@@ -64,44 +64,26 @@ class EdgeDetector:
 
 
     # -----------------------------
-    # Step 3: apply weights
-    # -----------------------------
-    def apply_weights(self, features, weights):
+# Step 3: compute weighted features (PAPER-CORRECT)
+# -----------------------------
+    def compute_weighted_features(self, orig_feat, features, weights):
 
-        weighted = []
+        all_features = []
 
+        # original image (weight = 1)
+        all_features.append(orig_feat)
+
+        # enhanced images
         for feat, w in zip(features, weights):
 
-            wf = {}
+            weighted = {}
 
             for k in feat:
-                wf[k] = feat[k] * float(w)
+                weighted[k] = feat[k] * float(w)
 
-            weighted.append(wf)
+            all_features.append(weighted)
 
-        return weighted
-
-
-    # -----------------------------
-    # Step 4: combine feature maps
-    # -----------------------------
-    def combine_features(self, original_feat, weighted_feats):
-
-        fused = {}
-
-        n = len(weighted_feats) + 1
-
-        for level in original_feat.keys():
-
-            fused_feature = original_feat[level].clone()
-
-            for wf in weighted_feats:
-                fused_feature += wf[level]
-
-            fused[level] = fused_feature / n
-
-        return fused
-
+        return all_features
 
     # -----------------------------
     # Step 5: run detector
@@ -115,6 +97,14 @@ class EdgeDetector:
             output = self.model(tensor)
 
         return output
+    
+class BackboneOverride(torch.nn.Module):
+    def __init__(self, features):
+        super().__init__()
+        self.features = features
+
+    def forward(self, x):
+        return self.features
 
 class WeightedFasterRCNN:
 
@@ -129,22 +119,25 @@ class WeightedFasterRCNN:
 
     def detect_with_features(self, image_tensor, fused_features):
 
-        """
-        Run FasterRCNN using externally fused backbone features
-        """
-
-        # create ImageList object expected by RPN
+        # Step 1: create ImageList
         image_sizes = [(image_tensor.shape[-2], image_tensor.shape[-1])]
         images = ImageList(image_tensor, image_sizes)
 
-        # run RPN
+        # Step 2: RPN
         proposals, _ = self.model.rpn(images, fused_features)
 
-        # run ROI heads
+        # Step 3: ROI heads
         detections, _ = self.model.roi_heads(
             fused_features,
             proposals,
             image_sizes,
+        )
+
+        # 🚨 Step 4: POSTPROCESS (YOU MISSED THIS)
+        detections = self.model.transform.postprocess(
+            detections,
+            image_sizes,
+            image_sizes
         )
 
         return detections

@@ -2,7 +2,7 @@ import torch
 import cv2
 import os
 from enhancement.cloud_enhancement import CloudEnhancer
-from detection.edge_detection import EdgeDetector, WeightedFasterRCNN
+from detection.edge_detection import EdgeDetector, WeightedFasterRCNN, BackboneOverride
 from preprocessing.single_preprocess import preprocess_single_image
 
 from detection.visualize import draw_detections
@@ -21,7 +21,15 @@ models = [
     "enhancement/model_gamma.pth"
 ]
 
-cloud = CloudEnhancer(models)
+target_dirs = [
+    "enhancement/dataset/target_clahe",
+    "enhancement/dataset/target_hist",
+    "enhancement/dataset/target_sharpen",
+    "enhancement/dataset/target_bilateral",
+    "enhancement/dataset/target_gamma"
+]
+
+cloud = CloudEnhancer(models, target_dirs)
 edge = EdgeDetector()
 
 
@@ -29,7 +37,7 @@ edge = EdgeDetector()
 # Input image
 # -----------------------------
 
-image_path = "example-dataset/cat1/WIN_20260316_09_13_30_Pro.jpg"
+image_path = "example-dataset/cat1/2015_00022.jpg"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 
@@ -39,8 +47,8 @@ Y_tensor = torch.tensor(Y)
 # -----------------------------
 # Cloud stage
 # -----------------------------
-
-enhanced_images, weights = cloud.enhance_tensor(Y_tensor)
+image_name = os.path.basename(image_path)
+enhanced_images, weights = cloud.enhance_tensor(Y_tensor, image_name)
 
 print("Dynamic weights:", weights)
 
@@ -59,24 +67,39 @@ features = edge.extract_features(rgb_images)
 orig_features = edge.extract_features([rgb_resized])[0]
 
 # Step 3: apply weights
-weighted_feats = edge.apply_weights(features, weights)
-
-# Step 4: combine features
-combined_feats = edge.combine_features(orig_features, weighted_feats)
+all_features = edge.compute_weighted_features(
+    orig_features,
+    features,
+    weights
+)
 
 # Step 5: run detector
 # detections = edge.detect(rgb_resized) # first it was run on the original RGB device
 
-detector = WeightedFasterRCNN()
+# -----------------------------
+# Fuse features
+# -----------------------------
+fused_features = edge.fuse_feature_maps(all_features)
 
+# -----------------------------
+# Override backbone
+# -----------------------------
+edge.model.backbone = BackboneOverride(fused_features)
+
+# -----------------------------
+# Run detector normally
+# -----------------------------
 detector_input = cv2.resize(rgb_resized, (800, 800))
 
-detector_tensor = torch.tensor(detector_input).permute(2,0,1).unsqueeze(0).float().to(device)
+detector_tensor = (
+    torch.tensor(detector_input)
+    .permute(2,0,1)
+    .unsqueeze(0)
+    .float()/255
+).to(device)
 
-detections = detector.detect_with_features(
-    detector_tensor,
-    combined_feats
-)
+with torch.no_grad():
+    detections = edge.model(detector_tensor)
 
 print("Detections:", detections)
 
