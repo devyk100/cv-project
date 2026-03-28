@@ -6,6 +6,7 @@ from torchvision.models.detection.image_list import ImageList
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 class EdgeDetector:
 
     def __init__(self):
@@ -49,10 +50,9 @@ class EdgeDetector:
 
         for img in images:
 
-            img = cv2.resize(img, (800, 800)) # the boxes get an offset due to resizing, so we stay at 244 X 244
-            # img = cv2.resize(img, (224,224))
+            img = cv2.resize(img, (800, 800))
 
-            tensor = torch.tensor(img).permute(2,0,1).float()/255
+            tensor = torch.tensor(img).permute(2, 0, 1).float() / 255
             tensor = tensor.unsqueeze(0).to(device)
 
             with torch.no_grad():
@@ -64,16 +64,19 @@ class EdgeDetector:
 
 
     # -----------------------------
-# Step 3: compute weighted features (PAPER-CORRECT)
-# -----------------------------
+    # Step 3: compute weighted features (eq. 7)
+    # orig_feat gets weight = 1
+    # each enhanced feat gets weight = v_i
+    # features stay SEPARATE (not summed)
+    # -----------------------------
     def compute_weighted_features(self, orig_feat, features, weights):
 
-        all_features = []
+        weighted_features = []
 
-        # original image (weight = 1)
-        all_features.append(orig_feat)
+        # original image: weight = 1 (eq. 7, v_0 = 1)
+        weighted_features.append(orig_feat)
 
-        # enhanced images
+        # enhanced images: weight = v_i
         for feat, w in zip(features, weights):
 
             weighted = {}
@@ -81,63 +84,53 @@ class EdgeDetector:
             for k in feat:
                 weighted[k] = feat[k] * float(w)
 
-            all_features.append(weighted)
+            weighted_features.append(weighted)
 
-        return all_features
+        return weighted_features
+
 
     # -----------------------------
-    # Step 5: run detector
+    # Step 4: sum weighted feature maps into one (eq. 7 final combination)
+    # RPN will use orig_feat only (passed separately)
+    # ROI heads use this combined map
     # -----------------------------
-    def detect(self, image):
+    def fuse_feature_maps(self, weighted_features):
 
-        tensor = torch.tensor(image).permute(2,0,1).float()/255
-        tensor = tensor.unsqueeze(0).to(device)
+        fused = {}
 
-        with torch.no_grad():
-            output = self.model(tensor)
+        for k in weighted_features[0]:
+            fused[k] = sum(feat[k] for feat in weighted_features)
 
-        return output
-    
-class BackboneOverride(torch.nn.Module):
-    def __init__(self, features):
-        super().__init__()
-        self.features = features
+        return fused
 
-    def forward(self, x):
-        return self.features
 
-class WeightedFasterRCNN:
+    # -----------------------------
+    # Step 5: detect using paper-correct two-stage approach:
+    #   - RPN on original image features only
+    #   - ROI heads on fused weighted features
+    # -----------------------------
+    def detect(self, orig_feat, fused_feat, image_tensor):
 
-    def __init__(self):
-
-        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-            weights="DEFAULT"
-        )
-
-        self.model = self.model.to(device)
-        self.model.eval()
-
-    def detect_with_features(self, image_tensor, fused_features):
-
-        # Step 1: create ImageList
         image_sizes = [(image_tensor.shape[-2], image_tensor.shape[-1])]
         images = ImageList(image_tensor, image_sizes)
 
-        # Step 2: RPN
-        proposals, _ = self.model.rpn(images, fused_features)
+        with torch.no_grad():
 
-        # Step 3: ROI heads
-        detections, _ = self.model.roi_heads(
-            fused_features,
-            proposals,
-            image_sizes,
-        )
+            # RPN uses original image features only (paper Section III-C)
+            proposals, _ = self.model.rpn(images, orig_feat)
 
-        # 🚨 Step 4: POSTPROCESS (YOU MISSED THIS)
-        detections = self.model.transform.postprocess(
-            detections,
-            image_sizes,
-            image_sizes
-        )
+            # ROI heads use fused weighted feature maps
+            detections, _ = self.model.roi_heads(
+                fused_feat,
+                proposals,
+                image_sizes,
+            )
+
+            # postprocess
+            detections = self.model.transform.postprocess(
+                detections,
+                image_sizes,
+                image_sizes
+            )
 
         return detections

@@ -37,7 +37,7 @@ edge = EdgeDetector()
 # Input image
 # -----------------------------
 
-image_path = "example-dataset/cat1/2015_00022.jpg"
+image_path = "dataset/1/Bicycle/2015_00022.jpg"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 
@@ -47,7 +47,13 @@ Y_tensor = torch.tensor(Y)
 # -----------------------------
 # Cloud stage
 # -----------------------------
-image_name = os.path.basename(image_path)
+base = os.path.basename(image_path)
+
+# remove extension
+base = os.path.splitext(base)[0]
+
+# match preprocessing naming
+image_name = f"Y_{base}.png"
 enhanced_images, weights = cloud.enhance_tensor(Y_tensor, image_name)
 
 print("Dynamic weights:", weights)
