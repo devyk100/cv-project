@@ -27,7 +27,7 @@ edge = EdgeDetector()
 # Input image
 # -----------------------------
 
-image_path = "dataset/1/Bicycle/2015_00020.jpg"
+image_path = "dataset/1/Table/2015_06866.jpg"
 
 rgb_resized, Y, Cr, Cb = preprocess_single_image(image_path)
 
